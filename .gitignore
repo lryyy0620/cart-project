@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
+*.egg-info/
+build/
+dist/
+
+# 测试与工具
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 运行产物（M2 起会产生）
+data/
+logs/
+*.jsonl
+
+# 编辑器
+.vscode/
+.idea/
+
+# 作业截图等参考资料，不入库
+/*.jpg
+/*.png
+docs/assignment/
+
+# pytest 在部分环境下留下的临时目录
+pytest-cache-files-*/
+
+# 场景和测试的临时工作目录
+.scratch/

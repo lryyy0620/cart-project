@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>购物车 CRDT · 网络分区控制台</title>
+<style>
+  :root {
+    --bg: #0e1117; --card: #161b26; --card2: #1d2431; --line: #2a3342;
+    --text: #e6edf7; --muted: #8b98ab; --ok: #34d399; --bad: #f87171;
+    --warn: #fbbf24; --accent: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.45 system-ui, "Microsoft YaHei", "PingFang SC", sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 8px 16px; border-bottom: 1px solid var(--line);
+    background: rgba(14,17,23,.92); z-index: 5;
+  }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  h1 span { color: var(--accent); }
+  .hint { color: var(--muted); font-size: 11px; }
+  .badge {
+    margin-left: auto; padding: 3px 10px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600; border: 1px solid var(--line); color: var(--muted);
+  }
+  .badge.ok { color: var(--ok); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.08); }
+  .badge.bad { color: var(--warn); border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.08); }
+  main {
+    flex: 1 1 auto; min-height: 0;
+    padding: 10px 16px 12px; display: grid; gap: 10px;
+    grid-template-rows: auto auto minmax(150px, 1fr);
+  }
+  .replicas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .replicas > .card { display: flex; flex-direction: column; }
+  .replicas > .card .actions { margin-top: auto; padding-top: 8px; }
+  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .split { display: grid; grid-template-columns: 2.2fr 1fr; gap: 10px; min-height: 0; }
+  .split > .card { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .split #log { flex: 1 1 auto; min-height: 0; }
+  #target { width: 56px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 11px; transition: border-color .2s, opacity .2s;
+  }
+  .card.down { opacity: .55; border-color: rgba(248,113,113,.45); }
+  .card-head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px rgba(52,211,153,.7); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 8px rgba(248,113,113,.7); }
+  .name { font-weight: 700; letter-spacing: .5px; }
+  .meta { color: var(--muted); font-size: 11px; font-family: ui-monospace, Consolas, monospace; }
+  .card-head .meta { margin-left: auto; }
+  .cart { min-height: 46px; border-radius: 7px; background: var(--card2); padding: 6px 8px; }
+  .chip-user { color: var(--muted); font-size: 10.5px; margin-bottom: 3px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    background: rgba(96,165,250,.10); border: 1px solid rgba(96,165,250,.22);
+    border-radius: 5px; padding: 1px 6px; font-size: 11.5px; white-space: nowrap;
+  }
+  .chip b { font-family: ui-monospace, Consolas, monospace; color: var(--accent); font-weight: 600; }
+  .chip.empty { background: transparent; border-color: var(--line); color: var(--muted); }
+  .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  button {
+    background: #232c3b; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 9px; font-size: 11.5px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #2b3648; border-color: #3b4a61; }
+  button.on { background: rgba(248,113,113,.15); border-color: rgba(248,113,113,.5); color: #fca5a5; }
+  button.primary { background: rgba(96,165,250,.15); border-color: rgba(96,165,250,.45); color: #bfdbfe; }
+  h2 { font-size: 10.5px; margin: 0 0 6px; color: var(--muted); font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
+  .link-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .link-row:last-child { border-bottom: 0; }
+  .link-name { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .link-state { font-size: 11.5px; }
+  .link-state.ok { color: var(--ok); }
+  .link-state.bad { color: var(--bad); }
+  .link-row button { margin-left: auto; }
+  .form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 5px; }
+  .form label { color: var(--muted); font-size: 11px; }
+  input, select {
+    background: #0f141d; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 2px 6px; font-size: 11.5px; font-family: inherit;
+  }
+  input[type=number] { width: 66px; }
+  #log { list-style: none; margin: 0; padding: 0; max-height: none; overflow: auto; font-size: 11px; }
+  #log li { padding: 2px 0; border-bottom: 1px dashed rgba(42,51,66,.7); color: var(--muted); }
+  #log li b { color: var(--text); font-weight: 600; }
+  #log li.ok b { color: var(--ok); }
+  #log li.bad b { color: var(--bad); }
+  #log time { color: #5b6779; margin-right: 5px; font-family: ui-monospace, Consolas, monospace; }
+  .toast {
+    position: fixed; right: 20px; bottom: 20px; background: #1f2937; border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    max-width: 460px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.bad { border-left-color: var(--bad); }
+  .lww { margin-top: 4px; font-size: 10.5px; color: #fca5a5; line-height: 1.4; }
+  .labs { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+  .labs .sub { border-right: 1px dashed var(--line); padding-right: 12px; }
+  .labs .sub:last-child { border-right: 0; padding-right: 0; }
+  .labs h3 { font-size: 11px; margin: 0 0 5px; color: var(--accent); font-weight: 600; }
+  .result {
+    margin-top: 5px; font-size: 10.5px; color: var(--muted);
+    font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; line-height: 1.5;
+  }
+  .result b { color: var(--text); }
+  @media (max-width: 1100px) {
+    .replicas, .three, .split { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>购物车服务 · <span>网络分区控制台</span></h1>
+  <span class="hint">断网 → 两端各加一件 → 看分叉；恢复 → 看自动合并</span>
+  <span class="badge" id="badge">连接中…</span>
+</header>
+
+<main>
+  <div class="replicas" id="replicas"></div>
+
+  <div class="three">
+    <section class="card">
+      <h2>网络链路</h2>
+      <div id="links"></div>
+      <div class="actions">
+        <button id="splitAll">全部分区（{r1,r2} | {r3}）</button>
+        <button id="healAll">全部恢复</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>故障注入（作用于全部副本）</h2>
+      <div class="form">
+        <label>延迟 ms</label><input type="number" id="latency" value="0" min="0" step="100">
+        <label>重复份数</label><input type="number" id="duplicate" value="1" min="1" max="5">
+        <label>丢包率</label><input type="number" id="drop" value="0" min="0" max="1" step="0.1">
+      </div>
+      <div class="form">
+        <label>乱序窗口 ms</label><input type="number" id="reorder" value="0" min="0" step="50">
+        <label>响应丢失率</label><input type="number" id="lost" value="0" min="0" max="1" step="0.1">
+      </div>
+      <div class="actions">
+        <button class="primary" id="applyFault">应用</button>
+        <button id="clearFault">清除</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>客户端</h2>
+      <div class="form">
+        <label>用户</label><input id="user" value="alice" style="width:68px">
+        <label>商品</label><input id="sku" value="苹果" style="width:78px">
+        <label>数量</label><input type="number" id="qty" value="1" min="1" style="width:46px">
+        <label>打到</label><select id="target"></select>
+      </div>
+      <div class="actions">
+        <button class="primary" id="addBtn">加购</button>
+        <button id="removeBtn">删除</button>
+        <button id="checkoutBtn">结算 CAS</button>
+        <button id="raceBtn">并发抢单</button>
+      </div>
+      <div class="hint" style="margin-top:6px;font-size:10.5px">
+        结算自动路由到主副本；「抢单」用旧版本号演示 409；分区凑不到多数派返回 503
+      </div>
+    </section>
+  </div>
+
+  <div class="split">
+  <section class="card">
+    <h2>实验工具 · 覆盖 9 个 topic</h2>
+    <div class="labs">
+      <div class="sub">
+        <h3>④⑤ 重启恢复 / 数据迁移</h3>
+        <div class="form">
+          <label>目标</label><select id="migTarget"></select>
+          <label>源</label><select id="migSource"></select>
+        </div>
+        <div class="form">
+          <label>页大小</label><input type="number" id="migPageSize" value="5" min="1" style="width:64px">
+          <label>页数</label><input type="number" id="migPages" value="1" min="1" style="width:64px">
+        </div>
+        <div class="actions">
+          <button id="migWipe">清空目标</button>
+          <button id="migBtn">迁移 N 页后中断</button>
+          <button class="primary" id="migContinue">继续迁移</button>
+          <button id="migResume">恢复同步</button>
+        </div>
+        <div class="result" id="migResult">先「清空目标」造一台空节点（会自动暂停它的反熵），再迁移并在半路中断</div>
+      </div>
+
+      <div class="sub">
+        <h3>⑧ 时钟倒退</h3>
+        <div class="form">
+          <label>目标</label><select id="clockTarget"></select>
+          <label>偏移 ms</label><input type="number" id="clockOffset" value="-60000" step="1000" style="width:96px">
+        </div>
+        <div class="actions">
+          <button class="primary" id="clockBtn">注入（倒退 60 秒）</button>
+          <button id="clockReset">归零</button>
+        </div>
+        <div class="result" id="clockResult">注入后在这台副本上加购，看下面那行红字</div>
+      </div>
+
+      <div class="sub">
+        <h3>⑥ 单 key 热点</h3>
+        <div class="form">
+          <label>打到</label><select id="burstTarget"></select>
+          <label>次数</label><input type="number" id="burstCount" value="200" min="1" style="width:76px">
+        </div>
+        <div class="form">
+          <label>热 key</label><input id="burstSku" value="手机" style="width:76px">
+          <label>占比</label><input type="number" id="burstRatio" value="0.5" min="0" max="1" step="0.1" style="width:64px">
+        </div>
+        <div class="actions">
+          <button class="primary" id="burstBtn">开始压测</button>
+        </div>
+        <div class="result" id="burstResult">50% 的请求打同一个 key，看是否零冲突</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>事件</h2>
+    <ul id="log"></ul>
+  </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lastConsistent = null;
+let lastCarts = "";
+let lastState = null;
+let timer = null;
+
+function esc(text) {
+  return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function fmtItems(items) {
+  const entries = Object.entries(items || {});
+  return entries.length ? entries.map(([sku, qty]) => `${sku}×${qty}`).join(" ") : "空";
+}
+
+// 精简版：最多列 4 个，避免把卡片撑高
+function briefItems(items) {
+  const entries = Object.entries(items || {});
+  if (!entries.length) return "空";
+  const head = entries.slice(0, 4).map(([sku, qty]) => `${sku}×${qty}`).join(" ");
+  return entries.length > 4 ? `${head} …+${entries.length - 4}` : head;
+}
+
+function log(message, kind = "") {
+  const li = document.createElement("li");
+  if (kind) li.className = kind;
+  const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  li.innerHTML = `<time>${now}</time><b>${esc(message)}</b>`;
+  $("log").prepend(li);
+  while ($("log").children.length > 40) $("log").lastChild.remove();
+}
+
+let toastTimer = null;
+function toast(message, bad = false) {
+  const node = $("toast");
+  node.textContent = message;
+  node.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (node.className = "toast"), 3200);
+}
+
+async function api(path, body) {
+  const options = body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : {};
+  const response = await fetch(path, options);
+  return response.json();
+}
+
+function cartKey(replicas) {
+  return replicas.map((r) => JSON.stringify(r.carts || {})).join("|");
+}
+
+function renderReplicas(state) {
+  const box = $("replicas");
+  box.innerHTML = "";
+  for (const replica of state.replicas) {
+    const down = !replica.reachable || replica.down;
+    const card = document.createElement("div");
+    card.className = "card" + (down ? " down" : "");
+
+    const carts = replica.carts || {};
+    const users = Object.keys(carts);
+    const rows = users.length
+      ? users.map((user) => {
+          const items = carts[user];
+          const chips = Object.entries(items)
+            .map(([sku, qty]) => `<span class="chip">${esc(sku)}<b>×${qty}</b></span>`)
+            .join("");
+          return `<div class="chip-user">${esc(user)}</div><div class="chips">${
+            chips || '<span class="chip empty">空</span>'
+          }</div>`;
+        }).join("")
+      : '<div class="chips"><span class="chip empty">空购物车</span></div>';
+
+    const vv = Object.entries(replica.vv || {}).map(([k, v]) => `${k}:${v}`).join(" ") || "—";
+
+    const diffs = [];
+    for (const [user, items] of Object.entries(replica.lww || {})) {
+      const crdt = (replica.carts || {})[user] || {};
+      if (JSON.stringify(items) !== JSON.stringify(crdt)) {
+        diffs.push(`${user}: ${briefItems(items)}`);
+      }
+    }
+    const skewed = Number(replica.clock_offset_ms || 0) !== 0;
+    const lwwLine = skewed && diffs.length
+      ? `<div class="lww">时钟偏移 ${replica.clock_offset_ms}ms · 若按时间戳覆盖 → ${esc(diffs.join("；"))}</div>`
+      : "";
+
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="dot ${down ? "bad" : "ok"}"></span>
+        <span class="name">${esc(replica.name)}</span>
+        <span class="meta">ops ${replica.ops} · vv {${esc(vv)}}</span>
+      </div>
+      <div class="cart">${rows}</div>
+      ${lwwLine}
+      <div class="meta" style="margin-top:5px">
+        故障：${esc(replica.fault || "无")}${replica.paused ? ' · <span style="color:var(--warn)">同步已暂停</span>' : ""}
+      </div>
+      <div class="actions">
+        <button data-act="toggle" data-target="${esc(replica.name)}" class="${down ? "on" : ""}">
+          ${down ? "恢复" : "宕机"}
+        </button>
+        <button data-act="restart" data-target="${esc(replica.name)}">重启</button>
+        <button data-act="add" data-target="${esc(replica.name)}">+ 商品</button>
+        <button data-act="checkpoint" data-target="${esc(replica.name)}">检查点</button>
+      </div>`;
+    box.appendChild(card);
+  }
+}
+
+function renderLinks(state) {
+  const box = $("links");
+  box.innerHTML = "";
+  for (const link of state.links) {
+    const row = document.createElement("div");
+    row.className = "link-row";
+    row.innerHTML = `
+      <span class="link-name">${esc(link.a)} ↔ ${esc(link.b)}</span>
+      <span class="link-state ${link.blocked ? "bad" : "ok"}">${link.blocked ? "已断开" : "通"}</span>
+      <button data-act="link" data-a="${esc(link.a)}" data-b="${esc(link.b)}" data-blocked="${link.blocked}">
+        ${link.blocked ? "恢复" : "断开"}
+      </button>`;
+    box.appendChild(row);
+  }
+}
+
+function renderBadge(state) {
+  const alive = state.replicas.filter((r) => r.reachable && !r.down);
+  const badge = $("badge");
+  if (alive.length < 2) {
+    badge.className = "badge bad";
+    badge.textContent = `可用副本 ${alive.length}/${state.replicas.length} · 多数派 ${state.quorum}`;
+    return;
+  }
+  const keys = new Set(alive.map((r) => JSON.stringify(r.carts || {})));
+  const consistent = keys.size === 1;
+  badge.className = "badge " + (consistent ? "ok" : "bad");
+  badge.textContent = consistent
+    ? `副本一致 · ${alive.length}/${state.replicas.length} 在线`
+    : `副本分歧 · ${alive.length}/${state.replicas.length} 在线`;
+}
+
+function render(state) {
+  lastState = state;
+  renderReplicas(state);
+  renderLinks(state);
+  renderBadge(state);
+
+  const select = $("target");
+  const names = state.replicas.map((r) => r.name);
+  if (select.options.length !== names.length) {
+    select.innerHTML = names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  }
+  for (const id of ["migTarget", "migSource", "clockTarget", "burstTarget"]) {
+    const node = $(id);
+    if (node && node.options.length !== names.length) {
+      node.innerHTML = names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      if (id === "migTarget") node.value = names[names.length - 1];
+      if (id === "migSource") node.value = names[0];
+    }
+  }
+
+  const alive = state.replicas.filter((r) => r.reachable && !r.down);
+  const key = cartKey(alive);
+  if (lastCarts && key !== lastCarts && alive.length > 1) {
+    const keys = new Set(alive.map((r) => JSON.stringify(r.carts || {})));
+    if (keys.size === 1) log("副本已收敛（内容一致）", "ok");
+    else log("副本出现分歧（读到了不同状态）", "bad");
+  }
+  lastCarts = key;
+
+  if (lastConsistent !== null) {
+    const now = alive.length > 1 && new Set(alive.map((r) => JSON.stringify(r.carts))).size === 1;
+    if (now !== lastConsistent) log(now ? "状态：一致" : "状态：分歧", now ? "ok" : "bad");
+    lastConsistent = now;
+  } else if (alive.length) {
+    lastConsistent = new Set(alive.map((r) => JSON.stringify(r.carts))).size === 1;
+  }
+}
+
+async function refresh() {
+  try {
+    render(await api("/api/state"));
+  } catch (error) {
+    $("badge").className = "badge bad";
+    $("badge").textContent = "控制台与副本失联";
+  }
+}
+
+async function act(payload) {
+  const result = await api("/api/action", payload);
+  if (!result.ok) {
+    const detail = result.data && result.data.detail ? JSON.stringify(result.data.detail) : result.data;
+    toast(`${payload.action} 失败：${detail}`, true);
+    log(`${payload.action} 失败（HTTP ${result.status ?? "?"}）`, "bad");
+  }
+  await refresh();
+  return result;
+}
+
+// 加购：带 request_id；遇到"响应丢失"(504) 就用同一个 id 重试一次，演示幂等
+async function addWithRetry(target, user, sku, qty) {
+  const requestId = "ui-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+  const first = await act({ target, action: "add", params: { user, sku, qty, request_id: requestId } });
+  if (first.ok) return first;
+  if (first.status === 504) {
+    const retry = await act({ target, action: "add", params: { user, sku, qty, request_id: requestId } });
+    if (retry.ok) {
+      log("响应丢失 → 同一 request_id 重试成功，数量没有翻倍", "ok");
+      return retry;
+    }
+  }
+  return first;
+}
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-act]");
+  if (!button) return;
+  const act_ = button.dataset.act;
+  const target = button.dataset.target;
+
+  if (act_ === "toggle") {
+    const isDown = button.classList.contains("on");
+    await act({ target, action: isDown ? "up" : "down" });
+    log(`${target} ${isDown ? "恢复" : "宕机"}`);
+  } else if (act_ === "restart") {
+    const result = await act({ target, action: "restart" });
+    if (result.ok) {
+      log(`${target} 重启：从 WAL 恢复 ${result.data.recovered_ops ?? 0} 条操作`, "ok");
+    } else {
+      log(`${target} 重启失败`, "bad");
+    }
+  } else if (act_ === "add") {
+    await addWithRetry(target, $("user").value, $("sku").value, Number($("qty").value));
+    log(`${target} 加购 ${$("sku").value} ×${$("qty").value}`);
+  } else if (act_ === "checkpoint") {
+    const result = await act({ target, action: "checkpoint" });
+    if (result.ok) log(`${target} 写入检查点`, "ok");
+  } else if (act_ === "link") {
+    const blocked = button.dataset.blocked === "true";
+    await act({ action: "partition", params: { a: button.dataset.a, b: button.dataset.b, blocked: !blocked } });
+    log(`${button.dataset.a} ↔ ${button.dataset.b} ${blocked ? "恢复" : "断开"}`);
+  }
+});
+
+$("splitAll").onclick = async () => {
+  await act({ action: "partition", params: { a: "r1", b: "r3", blocked: true } });
+  await act({ action: "partition", params: { a: "r2", b: "r3", blocked: true } });
+  log("已分区：{r1,r2} | {r3}", "bad");
+};
+
+$("healAll").onclick = async () => {
+  for (const [a, b] of [["r1", "r2"], ["r1", "r3"], ["r2", "r3"]]) {
+    await act({ action: "partition", params: { a, b, blocked: false } });
+  }
+  log("网络已全部恢复", "ok");
+};
+
+$("applyFault").onclick = async () => {
+  await act({
+    action: "fault",
+    params: {
+      latency_ms: Number($("latency").value),
+      duplicate: Number($("duplicate").value),
+      drop_rate: Number($("drop").value),
+      reorder_window_ms: Number($("reorder").value),
+      drop_response_rate: Number($("lost").value),
+    },
+  });
+  log(`注入：延迟 ${$("latency").value}ms，重复 ${$("duplicate").value} 份，丢包 ${$("drop").value}，乱序 ${$("reorder").value}ms，响应丢失 ${$("lost").value}`);
+};
+
+$("clearFault").onclick = async () => {
+  await act({ action: "fault", params: { heal: true, latency_ms: 0, duplicate: 1, drop_rate: 0, reorder_window_ms: 0, drop_response_rate: 0 } });
+  log("已清除故障注入", "ok");
+};
+
+// ---- 实验工具 ----
+
+$("migWipe").onclick = async () => {
+  const target = $("migTarget").value;
+  const result = await act({ target, action: "wipe" });
+  if (result.ok) {
+    $("migResult").innerHTML =
+      `<b>${target}</b> 已清空（ops=0），并暂停了它的自动反熵。<br>` +
+      `现在它像一台刚加入的空节点，只能靠迁移拿数据。`;
+    log(`${target} 已清空并暂停同步`, "bad");
+  }
+};
+
+$("migResume").onclick = async () => {
+  const target = $("migTarget").value;
+  await act({ target, action: "pause", params: { paused: false } });
+  $("migResult").textContent = `${target} 已恢复自动反熵`;
+  log(`${target} 恢复同步`, "ok");
+};
+
+$("migBtn").onclick = async () => {
+  const target = $("migTarget").value;
+  const source = $("migSource").value;
+  const result = await act({
+    target,
+    action: "migrate",
+    params: {
+      source,
+      page_size: Number($("migPageSize").value),
+      pages: Number($("migPages").value),
+    },
+  });
+  if (result.ok) {
+    const data = result.data;
+    $("migResult").innerHTML =
+      `<b>中断</b>：第 ${data.pages} 页后停止，已应用 <b>${data.applied}</b> 条<br>` +
+      `vv = ${esc(JSON.stringify(data.vv))}<br>` +
+      `再点「继续迁移」，它会从这个位置接着拉，不重不丢。`;
+    log(`迁移中断：已拉 ${data.applied} 条`, "bad");
+  }
+};
+
+$("migContinue").onclick = async () => {
+  const target = $("migTarget").value;
+  const source = $("migSource").value;
+  const result = await act({
+    target,
+    action: "migrate",
+    params: { source, page_size: Number($("migPageSize").value) },
+  });
+  if (result.ok) {
+    const data = result.data;
+    $("migResult").innerHTML =
+      `<b>完成</b>：本次又应用 ${data.applied} 条，vv = ${esc(JSON.stringify(data.vv))}<br>` +
+      `对比两台的购物车，应当已经一致。`;
+    log(`迁移完成，又应用 ${data.applied} 条`, "ok");
+  }
+};
+
+$("clockBtn").onclick = async () => {
+  const target = $("clockTarget").value;
+  const offset = Number($("clockOffset").value);
+  const result = await act({ target, action: "clock", params: { offset_ms: offset } });
+  if (result.ok) {
+    $("clockResult").innerHTML =
+      `<b>${target}</b> 本地时钟偏移 <b>${offset}ms</b>（HLC 仍单调：${esc(result.data.hlc)}）<br>` +
+      `现在用它加购：CRDT 会保留，红字那行的 LWW 会丢。`;
+    log(`${target} 时钟偏移 ${offset}ms`, "bad");
+  }
+};
+
+$("clockReset").onclick = async () => {
+  const target = $("clockTarget").value;
+  await act({ target, action: "clock", params: { offset_ms: 0 } });
+  $("clockResult").textContent = "时钟已归零";
+  log(`${target} 时钟归零`, "ok");
+};
+
+$("burstBtn").onclick = async () => {
+  const target = $("burstTarget").value;
+  const result = await act({
+    target,
+    action: "burst",
+    params: {
+      count: Number($("burstCount").value),
+      hot_ratio: Number($("burstRatio").value),
+      hot_sku: $("burstSku").value,
+      user: $("user").value,
+    },
+  });
+  if (result.ok) {
+    const data = result.data;
+    $("burstResult").innerHTML =
+      `写入 <b>${data.ok}</b> 条（热 key ${data.hot} 条），耗时 <b>${data.elapsed_ms}ms</b>，` +
+      `单次 ${data.per_write_ms}ms<br>` +
+      `热 key 当前数量 <b>${data.hot_qty}</b>，零冲突。`;
+    log(`压测完成：${data.count} 次写入，热 key 命中 ${data.hot}`, "ok");
+  }
+};
+
+$("addBtn").onclick = async () => {
+  const target = $("target").value;
+  await addWithRetry(target, $("user").value, $("sku").value, Number($("qty").value));
+  log(`${target} 加购 ${$("sku").value} ×${$("qty").value}`);
+};
+
+$("removeBtn").onclick = async () => {
+  const target = $("target").value;
+  await act({ action: "remove", target, params: { user: $("user").value, sku: $("sku").value } });
+  log(`${target} 删除 ${$("sku").value}`);
+};
+
+function currentVersion(user) {
+  if (!lastState) return 0;
+  return lastState.replicas.reduce(
+    (max, replica) => Math.max(max, (replica.checkout_versions || {})[user] || 0),
+    0
+  );
+}
+
+async function doCheckout(expectedVersion, label) {
+  const user = $("user").value;
+  const result = await api("/api/action", {
+    action: "checkout",
+    target: $("target").value,
+    params: { user, expected_version: expectedVersion },
+  });
+  const owner = result.owner ? `（主副本 ${result.owner}）` : "";
+  if (result.ok) {
+    toast(`${label}成功：v${result.data.version}，共 ${result.data.total_qty} 件 ${owner}`);
+    log(`${label}成功 v${result.data.version}${owner}`, "ok");
+  } else {
+    const detail = result.data && result.data.detail;
+    const text =
+      detail && typeof detail === "object"
+        ? `版本冲突（当前 v${detail.current}）`
+        : String(detail || `HTTP ${result.status}`);
+    toast(`${label}被拒：${text}`, true);
+    log(`${label}被拒：${text}`, "bad");
+  }
+  await refresh();
+}
+
+$("checkoutBtn").onclick = () => doCheckout(currentVersion($("user").value), "结算");
+$("raceBtn").onclick = () => doCheckout(0, "并发抢单");
+
+refresh();
+timer = setInterval(refresh, 900);
+</script>
+</body>
+</html>

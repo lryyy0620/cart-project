@@ -1,0 +1,73 @@
+# 三个副本 = 三个容器；每个副本自己一个数据卷，WAL 落盘。
+#
+#   docker compose up --build -d
+#   python scripts/demo_http.py
+#   docker compose down -v
+#
+# 故障注入走 HTTP 管理接口（/admin/fault、/admin/partition、/admin/down），
+# 所以演示脚本不需要任何特权，也不需要 docker exec。
+
+name: cart-crdt
+
+services:
+  r1:
+    build: .
+    container_name: cart-r1
+    environment:
+      REPLICA_NAME: r1
+      CLUSTER: r1,r2,r3
+      PEERS: r2=http://r2:8000,r3=http://r3:8000
+      DATA_DIR: /data
+      SYNC_INTERVAL: "0.5"
+    ports:
+      - "8001:8000"
+    volumes:
+      - r1data:/data
+
+  r2:
+    build: .
+    container_name: cart-r2
+    environment:
+      REPLICA_NAME: r2
+      CLUSTER: r1,r2,r3
+      PEERS: r1=http://r1:8000,r3=http://r3:8000
+      DATA_DIR: /data
+      SYNC_INTERVAL: "0.5"
+    ports:
+      - "8002:8000"
+    volumes:
+      - r2data:/data
+
+  r3:
+    build: .
+    container_name: cart-r3
+    environment:
+      REPLICA_NAME: r3
+      CLUSTER: r1,r2,r3
+      PEERS: r1=http://r1:8000,r2=http://r2:8000
+      DATA_DIR: /data
+      SYNC_INTERVAL: "0.5"
+    ports:
+      - "8003:8000"
+    volumes:
+      - r3data:/data
+
+  console:
+    build: .
+    container_name: cart-console
+    environment:
+      REPLICAS: r1=http://r1:8000,r2=http://r2:8000,r3=http://r3:8000
+    command:
+      ["uvicorn", "cart.console:create_console_app", "--factory",
+       "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8010:8000"
+    depends_on:
+      - r1
+      - r2
+      - r3
+
+volumes:
+  r1data:
+  r2data:
+  r3data:

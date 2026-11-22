@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
+.git/
+.gitignore
+.scratch/
+data/
+logs/
+tests/
+docs/assignment/
+*.jpg
+pytest-cache-files-*/
