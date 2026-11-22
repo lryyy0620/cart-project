@@ -19,9 +19,6 @@ class LwwItem:
     qty: int
     ts: Timestamp
 
-    def to_dict(self) -> dict[str, object]:
-        return {"qty": self.qty, "ts": self.ts.to_dict()}
-
 
 @dataclass
 class LwwCart:

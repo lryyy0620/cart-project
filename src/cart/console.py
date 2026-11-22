@@ -126,6 +126,11 @@ def create_console_app(replicas: dict[str, str] | None = None) -> FastAPI:
 
     @app.post("/api/action")
     async def action(body: Action) -> dict[str, Any]:
+        """控制台的动作白名单。
+
+        只转发下面这几类，参数逐项显式取出再拼 payload——
+        等价于给浏览器加了一层"只能做这些事"的约束，而不是透传任意请求。
+        """
         params = body.params
         kind = body.action
 

@@ -106,7 +106,11 @@ class Cluster:
     # -- 反熵 -------------------------------------------------------------- #
 
     def sync(self) -> int:
-        """一轮反熵：每个可用副本向其它可用副本补发对方缺失的操作。"""
+        """一轮反熵：每个可用副本向其它可用副本补发对方缺失的操作。
+
+        这是**进程内驱动**（场景与测试用，同步、确定性强）；
+        真实服务里每个副本各自跑 ``api.py`` 的拉模式循环，逻辑一一对应。
+        """
         delivered = 0
         for src in self.replicas.values():
             for dst in self.replicas.values():
@@ -137,16 +141,6 @@ class Cluster:
             if moved == 0:
                 break
         return total
-
-    # -- 迁移 -------------------------------------------------------------- #
-
-    def join(self, replica: Replica) -> None:
-        """新副本加入集群（成员变化会改变结算主副本的归属）。"""
-        self.replicas[replica.name] = replica
-
-    def migrate(self, replica: Replica, source: str, page_size: int = 10,
-                pages: int | None = None) -> int:
-        return replica.join_from(self.replicas[source], page_size=page_size, pages=pages)
 
     # -- 读 ---------------------------------------------------------------- #
 

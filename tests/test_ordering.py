@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cart.crdt import Cart, Dot
+from cart.crdt import Dot
 from cart.replica import Replica
 
 

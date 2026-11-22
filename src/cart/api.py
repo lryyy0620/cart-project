@@ -127,6 +127,11 @@ def create_app(
     data_dir: str | None = None,
     sync_interval: float | None = None,
 ) -> FastAPI:
+    """建一个副本进程。
+
+    用工厂而不是模块级 ``app``，是因为同一个镜像要能当 r1 / r2 / r3：
+    身份全部来自环境变量（见文件头的说明），容器里只换 ``REPLICA_NAME``。
+    """
     name = name or os.environ.get("REPLICA_NAME", "r1")
     peers = peers if peers is not None else _parse_peers(os.environ.get("PEERS", ""))
     cluster = cluster or [n for n in os.environ.get("CLUSTER", name).split(",") if n]

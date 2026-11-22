@@ -25,13 +25,12 @@ from .lww import LwwCart
 from .wal import WriteAheadLog
 
 __all__ = [
-    "Replica",
-    "Receipt",
-    "ReplicaDown",
-    "NotOwner",
-    "VersionConflict",
     "CheckoutUnavailable",
     "MigrationInterrupted",
+    "Receipt",
+    "Replica",
+    "ReplicaDown",
+    "VersionConflict",
 ]
 
 
@@ -42,10 +41,6 @@ __all__ = [
 
 class ReplicaDown(RuntimeError):
     """目标副本已宕机（或被分区隔离），请求根本到不了。"""
-
-
-class NotOwner(RuntimeError):
-    """结算必须发给该用户的主副本。"""
 
 
 class CheckoutUnavailable(RuntimeError):
@@ -227,7 +222,16 @@ class Replica:
     # -- 应用（本地与远端共用） -------------------------------------------- #
 
     def apply(self, op: Op, persist: bool = True) -> bool:
-        """幂等应用一条操作；返回 True 表示确实带来了新信息。"""
+        """幂等应用一条操作；返回 True 表示确实带来了新信息。
+
+        三道门的顺序有讲究：
+
+        1. ``request_id``：客户端重试。回包可能丢了，但服务端其实已经成功；
+        2. ``origin``：网络重复投递。同一条 op 被转发了好几份；
+        3. ``down``：本副本已宕机，任何写都不接受。
+
+        三道都过了才落盘、才改内存 —— 落到磁盘的顺序必须是"先日志后状态"。
+        """
         if op.request_id and op.request_id in self._by_request:
             self.duplicates_ignored += 1
             return False
@@ -267,6 +271,8 @@ class Replica:
         if self.down:
             raise ReplicaDown(self.name)
 
+        # 对端落后到我们的检查点之前：它缺的那些 op 可能已经被检查点"吸收"、
+        # 日志里不再单独存在，只能改发一份全量状态让它整体合并（合并幂等，安全）。
         truncated = (
             self.checkpoint_vv is not None
             and self.checkpoint_vv.dominates(peer_vv)

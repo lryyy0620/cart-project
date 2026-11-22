@@ -42,12 +42,15 @@ def hr(title: str = "", size: int = 78) -> None:
 
 
 def table(headers: list[str], rows: list[list[str]], widths: list[int]) -> None:
-    """``widths`` 对应除最后一列（结果列）以外的各列宽度。"""
+    """``widths`` 对应除最后一列（结果列）以外的各列宽度。
+
+    传错列数会直接抛错（``strict=True``），而不是静默错位。
+    """
     total = sum(widths) + 8
-    head = "".join(pad(h, w) for h, w in zip(headers[:-1], widths)) + headers[-1]
+    head = "".join(pad(h, w) for h, w in zip(headers[:-1], widths, strict=True)) + headers[-1]
     print(head)
     print("-" * total)
     for row in rows:
-        cells = [pad(clip(str(value), w), w) for value, w in zip(row[:-1], widths)]
+        cells = [pad(clip(str(value), w), w) for value, w in zip(row[:-1], widths, strict=True)]
         print("".join(cells) + str(row[-1]))
     print("-" * total)

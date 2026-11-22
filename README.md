@@ -167,7 +167,6 @@ src/cart/
     console.html  控制台页面（原生 HTML/CSS/JS，无构建步骤）
   scenarios.py   9 个故障场景（预测 → 注入 → 对照 → 解释）
   runner.py      一键运行器
-  demo.py        最早的叙述式演示
   ui.py          终端中文对齐与表格
 scripts/
   local.py       本地起三个副本 + 控制台（不需要 Docker）
@@ -225,7 +224,8 @@ curl.exe -X POST http://127.0.0.1:8001/admin/partition -H "Content-Type: applica
 
 ```powershell
 $env:PYTHONPATH = "src"
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q          # 68 个测试
+.\.venv\Scripts\ruff.exe check src tests scripts # 代码检查，应为 All checks passed
 ```
 
 - `test_crdt.py` — OR-Set 语义逐条验证（并发添加、add-wins、墓碑）
@@ -282,3 +282,30 @@ $env:PYTHONPATH = "src"
 - [ ] 课程报告正文（需本人撰写痕迹，可基于 `docs/design.md` 扩写）
 - [ ] 现场 PPT（大纲可基于 README「它到底演示了什么」+ experiments.md）
 - [ ] 演示录屏（按 `python -m cart.runner` 的四步顺序录）
+
+---
+
+## 上传到 GitHub
+
+```powershell
+cd D:\购物车网络分区
+
+git init                                    # 已初始化过就跳过
+git config user.name  "你的名字"
+git config user.email "你的邮箱"
+
+git add -A
+git commit -m "feat: 购物车 CRDT 与网络分区演示"
+git branch -M main
+git remote add origin https://github.com/<你的用户名>/<仓库名>.git
+git push -u origin main
+```
+
+推之前确认三件事：
+
+1. `git status` 是干净的，`git ls-files` 里**没有** `.venv/`、`data/`、`*.jpg`；
+2. 顶层 README 里的仓库地址占位符已经换成真实地址；
+3. 仓库建好后在 GitHub 的 **About** 里填一句简介，勾上 README 展示。
+
+`.gitignore` 已经覆盖虚拟环境、运行数据、日志、截图缓存和构建产物，
+所以 `git add -A` 不会把本地跑出来的东西带上去。

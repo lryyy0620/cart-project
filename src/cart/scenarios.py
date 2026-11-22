@@ -422,7 +422,7 @@ def scenario_7(slow: bool = False) -> ScenarioResult:
         check("分区期间结算被拒绝（CP）", checkout_refused, True),
     ]
     result.notes.append(
-        f"该用户的结算主副本是 r3（一致性哈希），被隔离后只剩 1/3，低于多数派 2，"
+        "该用户的结算主副本是 r3（一致性哈希），被隔离后只剩 1/3，低于多数派 2，"
         "因此拒绝结算——这正是「宁可拒绝也不重复扣款」的取舍。"
     )
     return result

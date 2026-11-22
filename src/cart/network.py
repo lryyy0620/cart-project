@@ -68,11 +68,6 @@ class Network:
     def plan(self, sender: str, receiver: str) -> DeliveryPlan:
         return self.injector.plan(sender, receiver)
 
-    def deliver(self, sender: str, receiver: str) -> int:
-        """返回本次实际送达的份数（0 表示被丢弃 / 分区）。"""
-        plan = self.plan(sender, receiver)
-        return plan.copies if plan.delivered else 0
-
     # -- 统计 -------------------------------------------------------------- #
 
     @property

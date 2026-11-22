@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import random
 
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from cart.cluster import Cluster
 from cart.crdt import Cart, Dot, SkuEntry

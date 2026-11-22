@@ -79,6 +79,8 @@ def test_concurrent_add_wins_over_remove() -> None:
     assert removal.dots == (dot("phone", 1),)
 
     concurrent_add = phone.add("alice", "apple", 2)    # 手机并发又加了一条
+    assert concurrent_add is not None
+    assert concurrent_add.concurrent_with(removal), "这两次写应当被判为并发"
 
     merged = phone.cart("alice").merge_with(pc.cart("alice"))
     assert merged.quantity("apple") == 2, "并发新增被并发删除吃掉了"

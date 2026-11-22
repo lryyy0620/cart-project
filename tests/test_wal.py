@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 from cart.replica import Replica
-from cart.wal import WriteAheadLog
 
 
 def test_wal_replay_without_checkpoint(tmp_path) -> None:
