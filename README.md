@@ -12,7 +12,7 @@
 自带一个**可视化控制台**：三个副本的实时状态、链路开关、故障注入、加购与结算都是点按钮，
 断网后能亲眼看到两边分叉、恢复后自动合并。
 
-**GitHub 仓库**：`<在这里填仓库地址>`
+**GitHub 仓库**：`<https://github.com/lryyy0620/cart-project>`
 
 ---
 
@@ -271,41 +271,3 @@ $env:PYTHONPATH = "src"
 | 无重新选主 | 主副本宕机则结算不可用 | Raft / lease + fencing token |
 | 全量状态无压缩 | 大购物车迁移慢 | Merkle 差分、增量快照 |
 | 热点分片未实现 | 单 key 读扩展受限 | 拆成 N 个计数副本 |
-
----
-
-## 待补（课程交付物）
-
-- [x] 代码 + 完整 README
-- [x] 9 个故障场景 + 一键运行
-- [x] 设计文档、实验记录
-- [ ] 课程报告正文（需本人撰写痕迹，可基于 `docs/design.md` 扩写）
-- [ ] 现场 PPT（大纲可基于 README「它到底演示了什么」+ experiments.md）
-- [ ] 演示录屏（按 `python -m cart.runner` 的四步顺序录）
-
----
-
-## 上传到 GitHub
-
-```powershell
-cd D:\购物车网络分区
-
-git init                                    # 已初始化过就跳过
-git config user.name  "你的名字"
-git config user.email "你的邮箱"
-
-git add -A
-git commit -m "feat: 购物车 CRDT 与网络分区演示"
-git branch -M main
-git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-git push -u origin main
-```
-
-推之前确认三件事：
-
-1. `git status` 是干净的，`git ls-files` 里**没有** `.venv/`、`data/`、`*.jpg`；
-2. 顶层 README 里的仓库地址占位符已经换成真实地址；
-3. 仓库建好后在 GitHub 的 **About** 里填一句简介，勾上 README 展示。
-
-`.gitignore` 已经覆盖虚拟环境、运行数据、日志、截图缓存和构建产物，
-所以 `git add -A` 不会把本地跑出来的东西带上去。
